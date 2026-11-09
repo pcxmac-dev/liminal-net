@@ -2,10 +2,10 @@
 
 Status: **draft for review**. It was first written on 2026-11-09 for Python on a Rust core, then revised the same day
 for a full rewrite in Rust. Its home is liminal-net (decision 80); liminal-libs keeps a pointer.
-- Built: liminal-net 0.1, the network in Rust (§3.4), with its tests and the test vectors of §5.7.
-- Decided: 1–8, 13–15, 17–20, 27, 36, 39, 43–56, 58, 60, 63, 67, 70–73 and 79–83.
+- Built: liminal-net 0.1, the network in Rust (§3.4), with its tests and the test vectors of §5.7; and 0.2, the
+  Python bridge (§4.9).
+- Decided: 1–8, 13–15, 17–20, 27, 36, 39, 43–56, 58, 60, 62, 63, 67, 70–73, 79–83 and 89–92.
 - Retired by the rewrite: the rows marked so.
-- Open, and built in 0.1 as recommended until the user decides them: 89–92, the points the building turned up.
 - Every other decision in the log (§10) stays open until the user decides it, and the code follows only decided
   items.
 
@@ -236,7 +236,8 @@ nodes. Its code is plain functions on worker threads (decision 60). It reaches o
 - The crates from crates.io, asked once by list before the first build (decision 79): approved on 2026-11-09 and
   fetched (tokio, serde, serde_json, indexmap, hmac, sha2, sha1, getrandom, thiserror, windows-sys, and what they
   pull in).
-- The bridge: maturin from PyPI, asked before its build (decision 62).
+- The bridge: maturin from PyPI, asked before its build (decision 62): approved and installed in `app\.venv` on
+  2026-11-09 (maturin 1.16.0, PyO3 0.30.1).
 - liminal-net's repository: local, at `source\liminal\net`. It goes to GitHub only on the user's yes
   (decision 58).
 
@@ -413,14 +414,31 @@ The arguments are never reshaped.
 - Across synapses there is no global order, unless a function orders by a field both sides share (a time, a job's
   id). That is how the logical order the user asked for is made explicit, link by link.
 
-### 4.9 Python functions in Rust nodes, while Python remains
+### 4.9 Python on the network, while it remains: the bridge (0.2, built)
 
-- A Rust node holds a Python function only through the bridge, and only while its piece still has Python. R8 removes
-  them all in the end.
-- The node keeps a reference to the function. It takes Python's lock only for the call, while its own threads keep
-  reading, filtering and routing.
-- A built-in synaptic function runs in Rust, so a stimulus it drops never wakes Python. A slow Python function is
-  queued, and never stalls a synapse.
+The bridge is `liminal-net-py` (decision 62): liminal-net built as a Python module, `liminal_net`, with PyO3, one abi3
+wheel for Python 3.12 and up. There is still one implementation of the network.
+
+- **A Python object is a node's code.**
+  - Its methods answer the interface's methods, as `method(*args, **kwargs)`. Or one `request(peer, method, args,
+    kwargs)` answers them all.
+  - It may also have `integrate(peer, signal, data)`, `admits(peer)` (`None` admits, text refuses with those words),
+    `attach(peer)`, `detach(peer)` and `shutdown()`.
+  - Its interface description is given beside it, as §6 writes it. Today's `Plugin.interface()` keeps its own shape
+    and meaning.
+- **Where Python runs.** The node's code runs on liminal-net's worker threads, never on its async ones. It holds the
+  interpreter's lock only for each call (decision 61). Every call from Python into the network lets go of the lock
+  while it waits, so Python and Rust never wait on each other's locks.
+- **The receiver's own functions** may be Python callables, given the stimulus as a dict. They give back `None`
+  (dropped), a dict (passed, perhaps reshaped) or a list of them. A built-in synaptic function runs in Rust, so a
+  stimulus it drops never wakes Python.
+- **Errors.** A Python exception crosses as a record: its class's name is the kind, `str()` the words, and
+  `accept`, `denied` and `status` are taken from it. It comes back as `liminal_net.RemoteError` with those attributes.
+  The network's own failures are `liminal_net.NetworkError`, a `ConnectionError`.
+- **Values** cross as §5.5's types: a tuple or a set as a list, bytes as base64 text, anything with `isoformat()` as
+  ISO-8601 text, NaN as null. An integer beyond 64 bits is refused (`OverflowError`), and so is any other object
+  (`TypeError`).
+- R8 removes the bridge with the last Python piece.
 
 ### 4.10 The old protocol beside the new
 
@@ -764,7 +782,7 @@ host.py's pipe until it moves (§4.10).
 |---|---|---|---|
 | 0 | liminal-libs | this document, for Python on a Rust core | this document, for Rust everywhere, reviewed |
 | 1 | liminal-net 0.1 (new, local): **built** | host.py's pickled dicts | the network in Rust (§3.4), `cargo test`, the test vectors |
-| 1b | liminal-net 0.2 | — | the bridge: a Python object as a node |
+| 1b | liminal-net 0.2: **built** | — | the bridge: a Python object as a node |
 | 2 | liminal-libs, liminal-platform, the 21 plugins the platform shows | Python, the plugins inside the platform's process | the 42 library modules the platform needs, ported in order; the platform's executable; each plugin's executable, one at a time; the Python plugins on the bridge until each is ported |
 | 3 | liminal-login | Python | Rust, its vaults kept readable |
 | 4 | liminal-integrator, the charts data API, the storage, the calendars | Python, and host.py's hosts | Rust, the hosts on the network (the restarts on the user's yes) |
@@ -857,7 +875,7 @@ Every row is **open** until the user decides it, unless it is marked decided or 
 | 59 | PyO3 bindings for the Python on top | | the bridge only (62) | retired |
 | 60 | Node code | async on tokio; plain functions run on worker threads | plain functions on worker threads, with tokio inside liminal-net: today's code is synchronous, so its ports read the same | **decided**: as recommended |
 | 61 | Python callbacks from Rust | | the bridge only (§4.9) | retired |
-| 62 | The bridge | PyO3 bindings of liminal-net (abi3, maturin); a small pure-Python speaker of the protocol | PyO3: one implementation of the network, checked once | open |
+| 62 | The bridge | PyO3 bindings of liminal-net (abi3, maturin); a small pure-Python speaker of the protocol | PyO3: one implementation of the network, checked once | **decided**: as recommended |
 | 63 | The toolchain here | rustup's stable MSVC toolchain (the VS 2022 C++ tools give the linker); the GNU toolchain | the MSVC toolchain | **decided**: the user installed it on 2026-11-09 (rustup 1.29.3, `stable-x86_64-pc-windows-msvc`, rustc and cargo 1.99.1, in `~\.cargo\bin`). maturin comes with the bridge (a PyPI download: the user's yes then) |
 | 64 | The repositories' CI | every repository builds its crate; wheels only | every repository builds its crate | open |
 | 65 | C++ | the crate's C ABI (cbindgen's `liminal_node.h`); a C++ port of the core | the C ABI: still one implementation | open |
@@ -884,7 +902,7 @@ Every row is **open** until the user decides it, unless it is marked decided or 
 | 86 | Hook signatures | the descriptions carry today's Python signature text; text generated from the Rust | carried: `/api/plugins` and `/api/interface` show the same | open |
 | 87 | Connections' attribution | from the network's links (every synapse, its two ends and its process); an audit-hook equivalent | from the links: the same columns, filled from what the network knows | open |
 | 88 | The workspace | from the executable's location, with `LIMINAL_HOME` and `LIMINAL_DB` as today; from the working folder | the executable's location, as `layout.py` uses its own file's | open |
-| 89 | Passing a signal on | the node's own choice, with `fire`; every signal integrated is fired on to this node's own links by default | its own choice: passed on by default, a node's own and its sources' signals would mix under one name, and two nodes linked both ways would echo forever | open; built so in 0.1 |
-| 90 | A new link for a state signal | gets the latest at once; waits for the next change | at once: the latest wins for a state, so a new link should not wait for a change to learn it | open; built so in 0.1 |
-| 91 | A signal's `seq` | counted per link, after the sender's functions; per source and signal, before them | per link, after: a filter at the sender would otherwise leave gaps that the receiver's `in_order` waits for | open; built so in 0.1 |
-| 92 | `link`, `unlink` and `tune` | carry an id and are answered, null or an error; sent with no answer | answered: a bad function or an unknown link is said back to the node that asked | open; built so in 0.1 |
+| 89 | Passing a signal on | the node's own choice, with `fire`; every signal integrated is fired on to this node's own links by default | its own choice: passed on by default, a node's own and its sources' signals would mix under one name, and two nodes linked both ways would echo forever | **decided**: as recommended |
+| 90 | A new link for a state signal | gets the latest at once; waits for the next change | at once: the latest wins for a state, so a new link should not wait for a change to learn it | **decided**: as recommended |
+| 91 | A signal's `seq` | counted per link, after the sender's functions; per source and signal, before them | per link, after: a filter at the sender would otherwise leave gaps that the receiver's `in_order` waits for | **decided**: as recommended |
+| 92 | `link`, `unlink` and `tune` | carry an id and are answered, null or an error; sent with no answer | answered: a bad function or an unknown link is said back to the node that asked | **decided**: as recommended |

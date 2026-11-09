@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.2.0 (2026-11-09)
+
+The Python bridge, `liminal-net-py` (decision 62): a Python object as a node on the network, built with PyO3 0.30
+as one abi3 wheel for Python 3.12 and up (`liminal_net`).
+- `Node(name, kind, scope, hillock, interface, ipc_dir=None, timing=None)`: `serve`, `start` and `join`, `stop`,
+  `fire`, `reach`, `lend`, `call`, `release`, `latest`, `receive`.
+- `Remote`: `request(method, *args, **kwargs)`, `link`, `unlink`, `tune`, `detach`, `closed`.
+- Python's values cross as the wire's types: a set as a list, bytes as base64, a time as ISO-8601 text, NaN as null.
+- A Python exception crosses as a record, and comes back as `RemoteError` with its kind, words, `accept`, `denied`
+  and `status`. The network's own failures are `NetworkError`.
+- Every call into the network lets go of the interpreter's lock while it waits.
+
+In liminal-net, a node's admission and its receiver's functions now run on worker threads, as requests do. They may
+be Python's.
+
+12 Python tests, among them a live check of the digests against host.py's own.
+
 ## 0.1.0 (2026-11-09)
 
 The network in Rust, as `docs/NETWORK.md` designs it:

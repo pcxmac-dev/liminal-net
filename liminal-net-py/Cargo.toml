@@ -1,0 +1,17 @@
+[package]
+name = "liminal-net-py"
+description = "liminal-net's Python bridge: a Python object as a node on Liminal's network"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[lib]
+name = "liminal_net_py"
+crate-type = ["cdylib"]
+
+[dependencies]
+net = { package = "liminal-net", path = "../liminal-net" }
+tokio = { version = "1", features = ["rt-multi-thread", "net", "io-util", "sync", "time", "macros"] }
+serde_json = { version = "1", features = ["preserve_order"] }
+pyo3 = { version = "0.30.1", features = ["abi3-py312"] }

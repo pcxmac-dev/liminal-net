@@ -13,20 +13,34 @@ The design, with every decision and its state, is [docs/NETWORK.md](docs/NETWORK
 
 ## Status
 
-0.1.0, 2026-11-09, local only: the network itself. 0.2 adds the Python bridge, so the Python not yet replaced can
-take part. Nothing in Liminal uses it yet.
+0.2.0, 2026-11-09, local only:
+- `liminal-net`: the network itself (0.1);
+- `liminal-net-py`: the Python bridge (0.2), so the Python not yet replaced takes part as nodes.
+
+Nothing in Liminal uses either yet.
 
 ## Build and test
 
 ```
 cargo build
-cargo test
-cargo clippy --all-targets
+cargo test -p liminal-net
+cargo clippy --all-targets --workspace
 cargo fmt --check
 ```
 
 The tests serve nodes in tasks, over a scratch key folder and under names of their own. They start no process and
 reach no network. `tests/vectors.rs` checks the test vectors of NETWORK.md §5.7, which today's Python computed.
+
+The bridge is built with maturin into a virtual environment, then tested from Python:
+
+```
+cd liminal-net-py
+maturin develop --release
+python -m pytest -q -p no:cacheprovider tests
+```
+
+It is one abi3 wheel per platform, for Python 3.12 and up. Building it needs `PYO3_PYTHON` (or an active
+environment) pointing at a Python. `cargo clippy --workspace` needs it too.
 
 ## A node
 
@@ -59,3 +73,28 @@ async fn main() -> std::io::Result<()> {
 
 Another node reaches it with `node.reach(&target, launcher)` and calls `remote.request("greet", ...)`. It asks for
 its signals with `remote.link("status", functions)`.
+
+## A node in Python, through the bridge
+
+```python
+import liminal_net
+
+class Greeter:
+    def greet(self, name):
+        return f"hello {name}"
+
+interface = {"trait": "example.Greeter",
+             "methods": {"greet": {"args": [{"name": "name", "type": "text"}], "returns": "text"}}}
+node = liminal_net.Node("greeter", "example", r"C:\data\liminal.db", Greeter(), interface)
+node.start()
+
+caller = liminal_net.Node("caller", "app", r"C:\data\liminal.db", object(), {"trait": "example.Caller"})
+print(caller.reach("greeter").request("greet", "you"))   # hello you
+```
+
+- The object's methods answer the interface's methods (or one `request(peer, method, args, kwargs)` answers
+  them all). It may also have `integrate`, `admits`, `attach`, `detach` and `shutdown`.
+- A Python exception crosses as a record: its class's name, its words, and its `accept`, `denied` and `status`.
+  It comes back as `liminal_net.RemoteError`.
+- `node.fire(signal, data)`, `remote.link(signal, functions, receiver)`, `node.lend(callable)` and `node.call(handle,
+  ...)` work as in Rust. Every call lets go of the interpreter's lock while it waits.

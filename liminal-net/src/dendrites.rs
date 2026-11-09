@@ -39,11 +39,17 @@ pub(crate) async fn serve(node: Node, mut conn: Conn, id: u64) {
             retry: false,
         })
     } else {
-        inner
-            .hillock
-            .admits(&hello.from)
-            .err()
-            .map(|why| Op::Refused { why, retry: false })
+        // The node's own code, on a worker thread: it may be Python's, and take the interpreter's lock.
+        let (admitting, peer) = (inner.clone(), hello.from.clone());
+        let admits = tokio::task::spawn_blocking(move || admitting.hillock.admits(&peer)).await;
+        match admits {
+            Ok(Ok(())) => None,
+            Ok(Err(why)) => Some(Op::Refused { why, retry: false }),
+            Err(_) => Some(Op::Refused {
+                why: format!("{} could not decide whether to admit", config.name),
+                retry: false,
+            }),
+        }
     };
     if let Some(refusal) = refusal {
         let _ = frame::write(&mut conn, &refusal.to_value()).await;
@@ -212,10 +218,14 @@ async fn integrate(node: Node, peer: Peer, mut inbox: mpsc::UnboundedReceiver<St
             _ = sleep_until(due) => None,
         };
         let now = Instant::now();
-        let passed = match stimulus {
-            Some(stimulus) => node.receive_through(stimulus, now),
-            None => node.receive_tick(&peer.name, now),
-        };
+        // The receiver's functions are its own code, on a worker thread: they may be Python's.
+        let (receiving, from) = (node.clone(), peer.name.clone());
+        let passed = tokio::task::spawn_blocking(move || match stimulus {
+            Some(stimulus) => receiving.receive_through(stimulus, now),
+            None => receiving.receive_tick(&from, now),
+        })
+        .await
+        .unwrap_or_default();
         for stimulus in passed {
             node.integrate(&peer, stimulus).await;
         }

@@ -1,0 +1,13 @@
+[build-system]
+requires = ["maturin>=1.7,<2"]
+build-backend = "maturin"
+
+[project]
+name = "liminal-net"
+version = "0.2.0"
+description = "liminal-net's Python bridge: a Python object as a node on Liminal's network"
+requires-python = ">=3.12"
+
+[tool.maturin]
+module-name = "liminal_net"
+features = ["pyo3/extension-module"]
