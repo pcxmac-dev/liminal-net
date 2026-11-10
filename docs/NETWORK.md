@@ -549,6 +549,13 @@ The reviews also found faults in 0.1 and 0.2 as built, which 0.3 mends:
 - at a node's end, what is queued and what the functions hold is dropped silently;
 - synapses already open keep being served after the node has secured its data.
 
+One more, found when CI first compiled and ran the Unix side on 2026-11-09 (all its jobs passed, on Ubuntu and on
+Windows). On Unix the key is written to a temporary file with the system's default permissions before it is made
+the owner's alone, the fall-back path creates it without restricting it at all, a failure to restrict it is
+ignored, and the folder is restricted only when a node binds. No test covers the Unix-only parts: these
+permissions, and the removal of a stale socket file. 0.3 creates the key owner-only from the start and adds those
+tests, which only CI can run from a Windows PC.
+
 ## 5. The protocol (language-neutral)
 
 ### 5.1 Addresses and the key
