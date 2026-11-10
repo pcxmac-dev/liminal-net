@@ -42,6 +42,11 @@ python -m pytest -q -p no:cacheprovider tests
 It is one abi3 wheel per platform, for Python 3.12 and up. Building it needs `PYO3_PYTHON` (or an active
 environment) pointing at a Python. `cargo clippy --workspace` needs it too.
 
+CI (`.github/workflows/ci.yml`) runs all of this on Ubuntu and on Windows, with Rust 1.99.1: the format check, the
+lints and the network's tests; then the bridge, built as pip builds it, on Python 3.12 and 3.15. It checks out
+liminal-libs beside this repository, as on a working PC, so that the bridge's digests are compared with
+`host.py`'s own. Without liminal-libs beside it, that one test is skipped.
+
 ## A node
 
 ```rust

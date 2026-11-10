@@ -109,6 +109,8 @@ def waiting():
 
 
 def test_digests_and_addresses_match_host_py(tmp_path):
+    if not (LIBS / "liminal_libs" / "host.py").is_file():
+        pytest.skip("liminal-libs is not checked out beside this repository")
     sys.path.insert(0, str(LIBS))
     try:
         from liminal_libs import host
