@@ -6,7 +6,7 @@ for a full rewrite in Rust. Its home is liminal-net (decision 80); liminal-libs 
   Python bridge (§4.9).
 - Decided and not built yet: a node's queue and its own thread (§4.11), in-process delivery (decision 42), and the
   macro that writes an interface from its trait (decision 38). They come with liminal-net 0.3.
-- Decided: 1–15, 17–22, 25, 27, 28, 35–40, 42–56, 58, 60, 62–64, 67, 70–73, 77, 79–83, 89–109 and 111–121.
+- Decided: 1–15, 17–22, 25, 27, 28, 35–40, 42–56, 58, 60, 62–64, 67, 70–73, 77, 79–83, 87, 89–109 and 111–123.
 - The research behind the platform slice's decisions found that several sections below describe a lifecycle and
   interfaces the platform does not have today. The decision log (§10) is current; the sections are corrected to
   it as the walk goes, and where the two disagree the log holds.
@@ -69,7 +69,7 @@ The requirements drawn from them:
 | R5 | Nodes are stateful and real time. Nothing runs unless used (the user's rule of 2026-11-01), and data is secured before a process ends. |
 | R6 | Every decision is walked through with the user; nothing is skipped over. |
 | R7 | At each synapse, callbacks or variable functions filter the stimulus, so that output comes out in the right logical order. |
-| R8 | Rust everywhere. Python appears only in nodes not yet replaced, through liminal-net's bridge, which goes with the last of them. |
+| R8 | Rust everywhere. Python appears only in nodes not yet replaced, through liminal-net's bridge. One exception, the user's choice of 2026-11-09 (decision 122): Cursor and Copilot stay Python for good, so the bridge stays for them. |
 | R9 | A node wraps a stateful object and has a queue of its own. A node whose queue its process cannot serve fast enough takes a thread of its own within that process, and runs autonomously (§4.11). |
 
 ## 2. The terms
@@ -455,7 +455,8 @@ wheel for Python 3.12 and up. There is still one implementation of the network.
 - **Values** cross as §5.5's types: a tuple or a set as a list, bytes as base64 text, anything with `isoformat()` as
   ISO-8601 text, NaN as null. An integer beyond 64 bits is refused (`OverflowError`), and so is any other object
   (`TypeError`).
-- R8 removes the bridge with the last Python piece.
+- The bridge stays after the rewrite for Cursor and Copilot, whose makers offer only Python packages (decision
+  122). Everything else leaves it as it is ported.
 
 ### 4.10 The old protocol beside the new
 
@@ -887,7 +888,7 @@ host.py's pipe until it moves (§4.10).
 | 4 | liminal-integrator, the charts data API, the storage, the calendars | Python, and host.py's hosts | Rust, the hosts on the network (the restarts on the user's yes) |
 | 5 | liminal-charts | Python and pandas | Rust and Polars |
 | 6 | the 15 feed plugins | Python | Rust |
-| 7 | liminal-net | the bridge | retired |
+| 7 | liminal-net | the bridge | kept for Cursor and Copilot only (decision 122); everything else is Rust |
 
 The traits, each with what it must implement. These are today's ABCs, under the same names:
 
@@ -970,7 +971,7 @@ Every row is **open** until the user decides it, unless it is marked decided or 
 | 55 | What a synaptic function is | an object of the synapse's (a `SynapticFunction` trait, not a node); a node of its own | the synapse's own: it has no dendrites of its own to be reached at | **decided**: as recommended |
 | 56 | Showing them | in Connections' existing text (a link's hover, the Latest table); a new control | the existing text: the existing UI is the reference | **decided**: as recommended |
 | 57 | Python on a Rust core | | becomes Rust everywhere (R8) | retired |
-| 58 | Where liminal-net lives | its own repository, local at `source\liminal\net`, on GitHub on the user's yes; inside liminal-libs | its own repository: every repository's crates depend on it. Creating the GitHub repository needs the user's yes | **decided**: as recommended |
+| 58 | Where liminal-net lives | its own repository, local at `source\liminal\net`, on GitHub on the user's yes; inside liminal-libs | its own repository: every repository's crates depend on it. Creating the GitHub repository needs the user's yes | **decided**: as recommended. On 2026-11-09 the user chose "Now, public" as the plan; it is created and pushed when they say so in words |
 | 59 | PyO3 bindings for the Python on top | | the bridge only (62) | retired |
 | 60 | Node code | async on tokio; plain functions run on worker threads | plain functions on worker threads, with tokio inside liminal-net: today's code is synchronous, so its ports read the same | **decided**: as recommended |
 | 61 | Python callbacks from Rust | | the bridge only (§4.9) | retired |
@@ -999,7 +1000,7 @@ Every row is **open** until the user decides it, unless it is marked decided or 
 | 84 | liminal-libs' Rust layout | a workspace of four crates (core, storage, contract, engine), every module keeping its name; one crate | four crates: a platform plugin builds against core and contract only. Today any platform plugin loads pandas just by importing `machines.plugin`, through `sources/__init__` | open |
 | 85 | pandas-shaped output | reproduced by hand where the charts and the CLI show it (`to_json` records, `Timestamp.isoformat()`, `to_csv`, `to_string`); Polars' own formats | reproduced: the outputs stay as they are | open |
 | 86 | Hook signatures | the descriptions carry today's Python signature text; text generated from the Rust | carried: `/api/plugins` and `/api/interface` show the same | open |
-| 87 | Connections' attribution | from the network's links (every synapse, its two ends and its process); an audit-hook equivalent | from the links: the same columns, filled from what the network knows | open |
+| 87 | Connections' attribution | each plugin reports what it starts and reaches; only what the platform sees itself; the operating system watches each plugin's process | each plugin reports: it is the only way the rows and their words stay as today, and a plugin in its own process needs no guessing about who called | **decided**: "Each plugin reports". The platform notes what it does itself. Each plugin's process notes what it starts and reaches, through the library's calls (a test enforces it), and sends it on |
 | 88 | The workspace | from the executable's location, with `LIMINAL_HOME` and `LIMINAL_DB` as today; from the working folder | the executable's location, as `layout.py` uses its own file's | open |
 | 89 | Passing a signal on | the node's own choice, with `fire`; every signal integrated is fired on to this node's own links by default | its own choice: passed on by default, a node's own and its sources' signals would mix under one name, and two nodes linked both ways would echo forever | **decided**: as recommended |
 | 90 | A new link for a state signal | gets the latest at once; waits for the next change | at once: the latest wins for a state, so a new link should not wait for a change to learn it | **decided**: as recommended |
@@ -1034,3 +1035,5 @@ Every row is **open** until the user decides it, unless it is marked decided or 
 | 119 | What a plugin's process is handed of its platform's environment | everything; everything but the variables plugins declare as secret settings; everything but any variable named like a key | all but the declared secrets: a key is read only through the login, and nothing else a plugin or its tools read from the environment changes | **decided**: "Without the plugins' secrets" |
 | 120 | What a plugin may read and save through its platform's login | any name, as today; only the variables its manifest declares; declared, and the asking process proved | only declared: the Settings form's own rule applied to plugins. Proving the caller is asked again before the login app's vault is behind it | **decided**: "Only its declared settings". The firewalls and the WSL plugins declare what they keep |
 | 121 | What an AI assistant's validity is read from | the login alone, each assistant's own variables; a `.env` file, the saved variables, the environment and the login for all plugins together, as today; the same without `.env`; the login only, the five judged together | the login, each its own: the user's settings rule, and "valid" then agrees with the "set" marks on the same page | **decided**: "The login, each its own". An accepted difference from today: a key kept only in a `.env` file no longer counts (none exists here), and a refused value marks only its own assistant |
+| 122 | Cursor and Copilot, which reach their makers only through Python packages (`cursor-sdk`, `github-copilot-sdk`) | decided when the charts app is ported; Rust talking to the makers' own local programs; kept in Python on the bridge for good; retired with the last Python | decide with the charts app: nothing in the platform slice depends on it | **decided**, the user's choice against the recommendation: "Keep these two in Python". They run through the bridge for good. R8 gains this exception: the bridge is not retired, and a Python installation stays on the PC for these two plugins |
+| 123 | Requests between plugins in Connections | drawn as a line between the two plugins; not noted, as today | drawn: it is what the view was made to show, and the page already draws such lines | **decided**: "Draw the line". An accepted difference from today's picture, where these are calls inside one process |
