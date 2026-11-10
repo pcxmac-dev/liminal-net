@@ -6,7 +6,7 @@ for a full rewrite in Rust. Its home is liminal-net (decision 80); liminal-libs 
   Python bridge (§4.9).
 - Decided and not built yet: a node's queue and its own thread (§4.11), in-process delivery (decision 42), and the
   macro that writes an interface from its trait (decision 38). They come with liminal-net 0.3.
-- Decided: 1–8, 12–15, 17–21, 27, 35–40, 42–56, 58, 60, 62, 63, 67, 70–73, 79–83 and 89–96.
+- Decided: 1–8, 12–15, 17–21, 27, 35–40, 42–56, 58, 60, 62, 63, 67, 70–73, 79–83 and 89–109.
 - Retired by the rewrite: the rows marked so.
 - Every other decision in the log (§10) stays open until the user decides it, and the code follows only decided
   items.
@@ -487,15 +487,58 @@ process, and run autonomously."
 - **Its priority** (decision 96). A node says which priority its thread needs, along with its autonomy. It is
   normal unless the node says otherwise.
 
-liminal-net 0.1 and 0.2 do not have this. Every node's code runs on the process's shared worker threads, each
-synapse's signals wait in a line of their own with no cap, and nothing measures a wait. It comes with 0.3. The
-design under these four decisions is still open, and each point becomes a row of the log before it is built:
-- the limits, and what exactly is measured;
-- how the shared threads serve many nodes' queues fairly;
-- the queues' caps, and what happens when a queue is full;
-- how a signal between two nodes of one process enters the queue (decision 42);
-- how many nodes of one process may be autonomous at once;
-- whether a node's own periodic work (a sampler's loop) runs on that thread.
+**How it works** (decisions 97 to 109: the user's answers of 2026-11-09, after three independent designs and three
+reviews of them):
+
+- **Shared handling** (100). liminal-net keeps a small set of servers of its own for the nodes that have no
+  thread: at most four at once, or the number of cores if that is smaller. They serve the nodes that have
+  something waiting, in fair turns. A server stuck inside a node's code is replaced, so one blocked node never
+  takes the others' share.
+- **The lines of arriving signals** (101). A node's arriving signals wait one line per source. The lines are
+  served in turns, and the node takes one signal at a time. Each source's order is kept; between sources there is
+  no order (decision 54). A source that floods fills only its own line.
+- **What the node fires** (102). Whatever serves a node also sends what it fires: its links' functions, their
+  timers, and the hand-over to each target. Each target has one line, first in, first out, so a target that is
+  slow or not reached yet delays nothing else. A thread that fires helps when the line of fired signals is half
+  full. Because output waits in the node's queue too, frequent output is measured, and can earn the thread.
+- **Being sure before a node moves** (103). A node is late when what waits for it is not being served. The time
+  it spends inside its own code does not count, unless other nodes are kept waiting by it. A stall of the whole
+  process is forgiven. One node moves at a time, and the others' accounts start again after a move. The first
+  limits are a wait of 0.25 s, 256 waiting, and 10 s to be sure. They are settings, set by measuring in the
+  platform slice.
+- **A node may also take its thread later, by its own call** (105): when its first terminal opens, when a heavy
+  job starts. Nothing goes back (94).
+- **How many** (99). At most 16 nodes of one process take a thread by measure. Beyond that a measured node stays
+  on the shared handling, and says so. A node that declared itself always gets its thread.
+- **Priorities** (106): low, normal and high, never real-time. On Linux a high that the system refuses runs at
+  normal, and says so.
+- **Caps** (104). A line holds at most 1,024 stimuli and 16 MB, and a node has a ceiling over all its lines
+  (first 4,096 stimuli and 64 MB). A state signal needs two places at most: the value that has waited longest,
+  and the latest.
+- **A full line** (97). Nobody waits, ever. The oldest waiting stream item is dropped, the loss is counted, and
+  the receiving node's code is told how many it missed. A dropped item keeps its number, so the gap shows. So
+  decision 43's "every item, in order" holds while a line has room. This is what a job's and a terminal's output
+  do today: they keep the newest 256 KB.
+- **A node's own periodic work** (98). A node may declare work of its own that nobody asks for: a sampler's
+  reading every 2 s, a terminal's reader. Whatever serves the node runs it: the shared servers at first, its own
+  thread once it has one. It is built when the first sampler, hw-stats, is ported.
+- **The end** (107). At a node's end what is still queued is finished for a bounded time (first 5 s). Then its
+  data is secured, and what was left is counted and said in the reason the node ended with. A call of the node's
+  code that does not return cannot keep its data from being secured.
+- **Delivery** (108) has three settings: direct, between nodes of one process (decision 42); encoded, the same
+  path through the encoding, which is decision 42's test mode; and the wire. The 16 MB rule and the errors are
+  the same in all three, and a float crosses the pipe exactly.
+
+liminal-net 0.1 and 0.2 have none of this: every node's code runs on the process's shared worker threads, no line
+has a cap, and nothing measures a wait. It comes with 0.3, whose full specification is written first, as
+`QUEUE.md` beside this document.
+
+The reviews also found faults in 0.1 and 0.2 as built, which 0.3 mends:
+- a message over 16 MB ends the synapse's replies instead of being refused with words (against decision 45);
+- a slow function at a receiver's end can hold up the node's other synapses;
+- a signal whose target cannot be reached is dropped with no count;
+- at a node's end, what is queued and what the functions hold is dropped silently;
+- synapses already open keep being served after the node has secured its data.
 
 ## 5. The protocol (language-neutral)
 
@@ -904,7 +947,7 @@ Every row is **open** until the user decides it, unless it is marked decided or 
 | 40 | Types in descriptions | from the Rust types (§6's table); untyped | from the Rust types | **decided**: from the Rust types (with 38) |
 | 41 | Python proxies named as the interface | | becomes a Rust client per trait, generated (§7) | retired |
 | 42 | In-process delivery | direct, with a test mode that encodes; always encoded | direct, with the test mode | **decided**: direct, with the test mode |
-| 43 | Signal kinds | state (coalesced, latest wins) and stream (every item, in order); one kind | both: a status is state, and a setup's lines are a stream | **decided**: as recommended |
+| 43 | Signal kinds | state (coalesced, latest wins) and stream (every item, in order); one kind | both: a status is state, and a setup's lines are a stream | **decided**: as recommended. When a stream's line is full, decision 97 applies |
 | 44 | Where a handle is answered | at its owner's dendrites (a synapse each way when both sides start conversations); on the same connection both ways | at its owner's dendrites: every link stays directed | **decided**: as recommended |
 | 45 | Frames | 4-byte big-endian length and UTF-8 JSON, at most 16 MB; other | as recommended | **decided**: as recommended |
 | 46 | Protocol versions | `proto` in the hello, a newer major refused with words | as recommended | **decided**: as recommended |
@@ -952,9 +995,23 @@ Every row is **open** until the user decides it, unless it is marked decided or 
 | 88 | The workspace | from the executable's location, with `LIMINAL_HOME` and `LIMINAL_DB` as today; from the working folder | the executable's location, as `layout.py` uses its own file's | open |
 | 89 | Passing a signal on | the node's own choice, with `fire`; every signal integrated is fired on to this node's own links by default | its own choice: passed on by default, a node's own and its sources' signals would mix under one name, and two nodes linked both ways would echo forever | **decided**: as recommended |
 | 90 | A new link for a state signal | gets the latest at once; waits for the next change | at once: the latest wins for a state, so a new link should not wait for a change to learn it | **decided**: as recommended |
-| 91 | A signal's `seq` | counted per link, after the sender's functions; per source and signal, before them | per link, after: a filter at the sender would otherwise leave gaps that the receiver's `in_order` waits for | **decided**: as recommended |
+| 91 | A signal's `seq` | counted per link, after the sender's functions; per source and signal, before them | per link, after: a filter at the sender would otherwise leave gaps that the receiver's `in_order` waits for | **decided**: as recommended. A stream item dropped from a full line keeps its number, so the receiver sees that gap (97) |
 | 92 | `link`, `unlink` and `tune` | carry an id and are answered, null or an error; sent with no answer | answered: a bad function or an unknown link is said back to the node that asked | **decided**: as recommended |
 | 93 | When a node takes a thread of its own (§4.11) | measured (its stimuli keep waiting longer than a limit, or its backlog passes a count) or declared by the node from its start; measured only; declared only | measured or declared: the measure catches a node nobody expected to be busy, and the declaration spares an always-busy node the wait | **decided**: measured, or declared |
 | 94 | Giving the thread back | after a quiet time; never, until the node ends | after a quiet time: nothing runs unless used | **decided**, the user's choice against the recommendation: "Keeps it until it ends". Once autonomous, a node stays autonomous until it ends |
 | 95 | What a node's queue holds | its signals in order, one at a time, and what it fires, with requests run beside it (48); everything, one at a time | signals queue, requests beside: a slow request never holds up the rest, as on today's threaded server | **decided**: signals queue, requests beside |
 | 96 | An autonomous thread's priority | normal; raised for every autonomous node; declared by each node | normal: a thread of its own already removes the waiting, and a raised priority could starve the page's answers | **decided**, the user's choice: "Each node says". A node declares the priority it needs along with its autonomy, normal by default |
+| 97 | A stream's line that is full | nobody waits: the oldest is dropped, counted, and the receiving code told; the sender waits up to 1 s, then the oldest is dropped; the sender waits without limit; no cap | nobody waits: it is the only rule under which a circle of nodes cannot stop, and it is what today's job and terminal output do | **decided**: "Drop oldest, say so". Decision 43's "every item" holds while a line has room |
+| 98 | A node's own periodic work | run by whatever serves the node; only on its own thread; not run by liminal-net (the node starts a thread itself) | for every node: a sampler needs no second thread, and its loop ends with the node | **decided**: "Yes, for every node". Built when hw-stats is ported |
+| 99 | How many nodes of one process may have a thread | 16 by measure, a declared node always; 16 for all; no limit | 16, declared always: a declaration is the node's own word (93), and the measured ones stay bounded | **decided**: "16, declared always" |
+| 100 | The shared handling | liminal-net's own servers, at most four or the number of cores at once, a stuck one replaced; tokio's pool as it is | its own bounded set: only a bounded share can be seen to fall short | **decided**: as recommended |
+| 101 | How arriving signals wait | one line per source, served in fair turns, one at a time for the node; one line per node in arrival order | per source: a flooding source fills only its own line, and decision 54 already gives no order across synapses | **decided**: as recommended |
+| 102 | Who sends what a node fires | whatever serves the node, a firing thread helping when the line is half full; the firing thread alone | the node's server: output then waits in the queue, is measured, and can earn the thread, as the user's rule says | **decided**: as recommended |
+| 103 | Being sure before a node moves | waiting stimuli only, a process's stall forgiven, one node at a time, first limits 0.25 s, 256 and 10 s as settings; quicker limits | as listed: a move is for good (94) | **decided**: as recommended. The numbers are first values, set by measuring in the platform slice |
+| 104 | The caps | 1,024 stimuli and 16 MB per line, with a ceiling per node; by count only | count and bytes: a count alone bounds nothing when one stimulus may be 16 MB | **decided**: as recommended |
+| 105 | Taking a thread later, by the node's own call | allowed; only measured or declared | allowed: a node sometimes knows before the measure does, and nothing goes back | **decided**: as recommended |
+| 106 | The priorities | low, normal and high, never real-time, a high that Linux refuses running at normal and saying so, with `libc` as a direct dependency for Unix targets; normal and high only | as listed | **decided**: as recommended. `libc` came with the crates approved on 2026-11-09 |
+| 107 | A node's end | what is queued is finished for a bounded time, then the data is secured, and what was left is counted and said; ended at once | bounded: a call that does not return cannot keep the data from being secured | **decided**: as recommended |
+| 108 | Delivery settings | direct, encoded (42's test mode) and wire, with the same 16 MB rule and errors; direct and wire only | three: decision 42 names an encoding of the in-process path | **decided**: as recommended |
+| 109 | Requests in progress | uncapped in 0.3; capped, the next refused with an error | uncapped for now: a cap that stops the reader would hold a status poll | **decided**: uncapped in 0.3, to be looked at again |
+| 110 | What a built-in function may hold (`gate`, `in_order`) | capped like a line, the oldest held dropped and counted; no cap | capped: a gate whose condition never comes would undo the line's cap one step later | open |
