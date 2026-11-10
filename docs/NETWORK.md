@@ -4,7 +4,7 @@ Status: **draft for review**. It was first written on 2026-11-09 for Python on a
 for a full rewrite in Rust. Its home is liminal-net (decision 80); liminal-libs keeps a pointer.
 - Built: liminal-net 0.1, the network in Rust (§3.4), with its tests and the test vectors of §5.7; and 0.2, the
   Python bridge (§4.9).
-- Decided: 1–8, 13–15, 17–20, 27, 36, 39, 43–56, 58, 60, 62, 63, 67, 70–73, 79–83 and 89–92.
+- Decided: 1–8, 12–15, 17–21, 27, 35–40, 42–56, 58, 60, 62, 63, 67, 70–73, 79–83 and 89–92.
 - Retired by the rewrite: the rows marked so.
 - Every other decision in the log (§10) stays open until the user decides it, and the code follows only decided
   items.
@@ -825,7 +825,7 @@ Every row is **open** until the user decides it, unless it is marked decided or 
 | 9 | What stays plain functions | §4.6's list; fewer | §4.6's list, for performance | open |
 | 10 | Processes for plugins | one each; grouped | one each, its executable, for isolation. A Rust node's memory is measured in Phase 2 (Python's take 30–45 MB) | open |
 | 11 | Shared parts as nodes of their own | where sharing pays; never | where sharing pays: one `Wsl` | open |
-| 12 | Nodes in one process | direct calls; always through the dendrites | direct: hot loops pay nothing | open |
+| 12 | Nodes in one process | direct calls; always through the dendrites | direct: hot loops pay nothing | **decided**: direct calls (with 42) |
 | 13 | Starting and letting go | at the first request, and after 120 s quiet, with a 10 s grace; host.py's 60 s idle | at the first request, quiet 120 s: nothing runs unless used | **decided**: as recommended |
 | 14 | Address scope | the reaching app's state (its database or folder), through host.py's digest; the user's | the reaching app's state: previews stay apart, and each login serves only its own plugins | **decided**: as recommended |
 | 15 | Reach | this machine only; other machines too | this machine only for now, with the transport pluggable | **decided**: as recommended |
@@ -834,7 +834,7 @@ Every row is **open** until the user decides it, unless it is marked decided or 
 | 18 | Default access | a plugin admits its app's namespace, and an app admits its plugins; anyone with the key | as recommended | **decided**: as recommended |
 | 19 | Errors | records whose kind is named as today's class, mapped to an error enum in Rust and rebuilt as classes on the bridge; text only | records: the platform's 400/502 and `accept` depend on the kind | **decided**: as recommended |
 | 20 | Coalescing state signals | 250 ms; another interval | 250 ms | **decided**: as recommended |
-| 21 | Pushing to the pages | keep polling; server-sent events | keep polling: the existing UI is the reference | open |
+| 21 | Pushing to the pages | keep polling; server-sent events | keep polling: the existing UI is the reference | **decided**: keep polling. No page of the platform or of the library's shared UI uses a push channel today (checked on 2026-11-09) |
 | 22 | A plugin's status watch | 5 s while linked; other | 5 s while linked, and at once on a background reader's change | open |
 | 23 | The abstract members | | becomes the traits' required methods (§9's table) | retired |
 | 24 | Records (`Provider`, `Publisher`) with `record_form` | | records are structs | retired |
@@ -848,14 +848,14 @@ Every row is **open** until the user decides it, unless it is marked decided or 
 | 32 | Versions: libs 1.41/1.42, platform 0.15, integrator 1.9 | | 81 | retired |
 | 33 | The integrator's and charts' first moves | the FetcherService, the plugins' jobs, "Try it"; re-planned with Phase 4 | re-planned when Phase 4 starts | open |
 | 34 | Feed runs, scans, extras, recorder | processes as now, nodes in Phase 4; earlier | in Phase 4 | open |
-| 35 | Tests | stand-ins only, and a live check on a scratch preview | as listed | open |
+| 35 | Tests | stand-ins only, and a live check on a scratch preview | as listed | **decided**: as listed. Tests start no process and reach no network |
 | 36 | The wire's encoding | JSON; CBOR; MessagePack; Protocol Buffers; Cap'n Proto | JSON: every language reads it, and it is readable. CBOR later if measured | **decided**: as recommended |
-| 37 | How other languages link in | Rust nodes link liminal-net; C++ through its C ABI; Python through the bridge while it remains | as listed | open |
-| 38 | The IDL's source | the Rust traits, the JSON generated from them; a hand-written schema; Protocol Buffers, Cap'n Proto, Thrift | the traits: the Rust is the single source | open |
+| 37 | How other languages link in | Rust nodes link liminal-net; C++ through its C ABI; Python through the bridge while it remains | as listed | **decided**: through liminal-net itself, never by reimplementing the protocol. Rust links it, and Python uses the bridge while it remains. How C++ joins stays 65, asked when C++ arrives |
+| 38 | The IDL's source | the Rust traits, the JSON generated from them; a hand-written schema; Protocol Buffers, Cap'n Proto, Thrift | the traits: the Rust is the single source | **decided**: the Rust trait. A macro on each trait writes its description, the dispatch of a request to the method, and the typed client other nodes use. Its crates (syn, quote, proc-macro2) are already among those downloaded |
 | 39 | The handshake | our own HMAC-SHA256 challenge, documented; `multiprocessing`'s | our own (§5.3) | **decided**: as recommended |
-| 40 | Types in descriptions | from the Rust types (§6's table); untyped | from the Rust types | open |
+| 40 | Types in descriptions | from the Rust types (§6's table); untyped | from the Rust types | **decided**: from the Rust types (with 38) |
 | 41 | Python proxies named as the interface | | becomes a Rust client per trait, generated (§7) | retired |
-| 42 | In-process delivery | direct, with a test mode that encodes; always encoded | direct, with the test mode | open |
+| 42 | In-process delivery | direct, with a test mode that encodes; always encoded | direct, with the test mode | **decided**: direct, with the test mode |
 | 43 | Signal kinds | state (coalesced, latest wins) and stream (every item, in order); one kind | both: a status is state, and a setup's lines are a stream | **decided**: as recommended |
 | 44 | Where a handle is answered | at its owner's dendrites (a synapse each way when both sides start conversations); on the same connection both ways | at its owner's dendrites: every link stays directed | **decided**: as recommended |
 | 45 | Frames | 4-byte big-endian length and UTF-8 JSON, at most 16 MB; other | as recommended | **decided**: as recommended |
