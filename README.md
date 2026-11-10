@@ -13,7 +13,7 @@ The design, with every decision and its state, is [docs/NETWORK.md](docs/NETWORK
 
 ## Status
 
-0.2.0, 2026-11-09, local only:
+0.2.0, 2026-11-09:
 - `liminal-net`: the network itself (0.1);
 - `liminal-net-py`: the Python bridge (0.2), so the Python not yet replaced takes part as nodes.
 

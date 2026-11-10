@@ -250,8 +250,8 @@ nodes. Its code is plain functions on worker threads (decision 60). It reaches o
   pull in).
 - The bridge: maturin from PyPI, asked before its build (decision 62): approved and installed in `app\.venv` on
   2026-11-09 (maturin 1.16.0, PyO3 0.30.1).
-- liminal-net's repository: local, at `source\liminal\net`. It goes to GitHub only on the user's yes
-  (decision 58).
+- liminal-net's repository: `source\liminal\net` on the user's PC, and `pcxmac-dev/liminal-net` on GitHub, public,
+  since 2026-11-09 on the user's word (decision 58).
 
 ## 4. The rules
 
@@ -971,7 +971,7 @@ Every row is **open** until the user decides it, unless it is marked decided or 
 | 55 | What a synaptic function is | an object of the synapse's (a `SynapticFunction` trait, not a node); a node of its own | the synapse's own: it has no dendrites of its own to be reached at | **decided**: as recommended |
 | 56 | Showing them | in Connections' existing text (a link's hover, the Latest table); a new control | the existing text: the existing UI is the reference | **decided**: as recommended |
 | 57 | Python on a Rust core | | becomes Rust everywhere (R8) | retired |
-| 58 | Where liminal-net lives | its own repository, local at `source\liminal\net`, on GitHub on the user's yes; inside liminal-libs | its own repository: every repository's crates depend on it. Creating the GitHub repository needs the user's yes | **decided**: as recommended. On 2026-11-09 the user chose "Now, public" as the plan; it is created and pushed when they say so in words |
+| 58 | Where liminal-net lives | its own repository, local at `source\liminal\net`, on GitHub on the user's yes; inside liminal-libs | its own repository: every repository's crates depend on it. Creating the GitHub repository needs the user's yes | **decided**: as recommended. On 2026-11-09 the user chose "Now, public" and then said "Create it": `pcxmac-dev/liminal-net` was created and pushed that day. Every later push still waits for their yes |
 | 59 | PyO3 bindings for the Python on top | | the bridge only (62) | retired |
 | 60 | Node code | async on tokio; plain functions run on worker threads | plain functions on worker threads, with tokio inside liminal-net: today's code is synchronous, so its ports read the same | **decided**: as recommended |
 | 61 | Python callbacks from Rust | | the bridge only (§4.9) | retired |
