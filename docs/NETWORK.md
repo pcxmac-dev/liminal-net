@@ -6,7 +6,10 @@ for a full rewrite in Rust. Its home is liminal-net (decision 80); liminal-libs 
   Python bridge (§4.9).
 - Decided and not built yet: a node's queue and its own thread (§4.11), in-process delivery (decision 42), and the
   macro that writes an interface from its trait (decision 38). They come with liminal-net 0.3.
-- Decided: 1–8, 12–15, 17–21, 27, 35–40, 42–56, 58, 60, 62, 63, 67, 70–73, 79–83 and 89–109.
+- Decided: 1–15, 17–22, 25, 27, 28, 35–40, 42–56, 58, 60, 62–64, 67, 70–73, 77, 79–83, 89–109 and 111–113.
+- The research behind the platform slice's decisions found that several sections below describe a lifecycle and
+  interfaces the platform does not have today. The decision log (§10) is current; the sections are corrected to
+  it as the walk goes, and where the two disagree the log holds.
 - Retired by the rewrite: the rows marked so.
 - Every other decision in the log (§10) stays open until the user decides it, and the code follows only decided
   items.
@@ -309,11 +312,12 @@ pluggable, so reaching other machines would be its own decision later (decision 
 - A signal's `seq` counts what was sent along that one link, after the sender's functions, so the receiver's
   `in_order` never waits for a gap that a filter made (decision 91).
 
-- A status watch inside a plugin's process runs only while something links for its `status`, every 5 s (decision
-  22), and fires on change.
-- Background readers fire as they read: hw-stats' samples, Namecheap's reader, the Windows firewall's reads.
-- The pages keep their own polling: the existing UI is the reference (decision 21). An app answers them from its
-  integrated state, so a poll no longer asks every plugin in turn.
+- There is no status watch (decision 22). A plugin's status is worked out when a route asks for it, by a request
+  to the plugin where today's code calls `status()`. Nothing is kept of it, and with no page open the platform asks
+  no plugin anything.
+- The pages keep their own polling: the existing UI is the reference (decision 21). The page asks for everything
+  at its load and after an action, and then polls only the plugin shown: every 1 s during a path check, every 2 s
+  for one with charts, every 30 s for one with tables.
 
 ### 4.5 Placement
 
@@ -322,8 +326,12 @@ pluggable, so reaching other machines would be its own decision later (decision 
   two behave alike (decision 42).
 - Each plugin, with its parts, runs as a resident node in a process of its own: its executable (decision 77). Each
   app's nodes live in the app's process.
-- A part shared by several plugins can be a node of its own, in its own process, where sharing pays. One `Wsl` for
-  the three WSL plugins would give the single shared `wsl --list --verbose` the helpers asked for.
+- In the platform slice no part is shared, as today (decision 11): each plugin's process holds its own drivers
+  (`Wsl`, `Shell`, `PowerShell`, `Docker`) and runs its own reads. A shared part as a node of its own is asked
+  again after the slice, with measurements.
+- A plugin's process lives while the plugin is active (decision 113): from the platform's start to its end for
+  each plugin that is switched on and valid, as today's attachment. A plugin that is switched off, or not for this
+  machine (decision 111), never has one.
 
 ### 4.6 What stays plain functions, and why
 
@@ -913,9 +921,9 @@ Every row is **open** until the user decides it, unless it is marked decided or 
 | 6 | The interface bases become nodes | all; some | all: the Plugin family, App, Login, DataSource, Assistant | **decided**: all |
 | 7 | The parts become nodes | all, after the platform slice; a few | all, after the slice is proven | **decided**: after the platform slice |
 | 8 | The library's other classes | case by case; all | case by case: a stateful object others talk to is a node, and a value or a pure calculation is not | **decided**: case by case |
-| 9 | What stays plain functions | §4.6's list; fewer | §4.6's list, for performance | open |
-| 10 | Processes for plugins | one each; grouped | one each, its executable, for isolation. A Rust node's memory is measured in Phase 2 (Python's take 30–45 MB) | open |
-| 11 | Shared parts as nodes of their own | where sharing pays; never | where sharing pays: one `Wsl` | open |
+| 9 | What stays plain functions | §4.6's list; fewer | §4.6's list, for performance | **decided**: §4.6's list. For the platform slice it also means that the platform answers by itself, with no plugin process: a plugin's declarations and interface from its manifest, the base's answer for a hook the plugin does not answer itself, and an assistant's validity |
+| 10 | Processes for plugins | one each; grouped | one each, its executable, for isolation | **decided**: one each. Measured on this PC on 2026-11-09: an idle Rust node process holds 7.8 MB (2.2 MB of its own). A Python process with the library every plugin imports holds 85 MB, because that import loads numpy and pandas |
+| 11 | Shared parts as nodes of their own | where sharing pays; never | where sharing pays: one `Wsl` | **decided**: none in the platform slice, as today, where each plugin runs its own reads. Asked again after the slice, with measurements |
 | 12 | Nodes in one process | direct calls; always through the dendrites | direct: hot loops pay nothing | **decided**: direct calls (with 42) |
 | 13 | Starting and letting go | at the first request, and after 120 s quiet, with a 10 s grace; host.py's 60 s idle | at the first request, quiet 120 s: nothing runs unless used | **decided**: as recommended |
 | 14 | Address scope | the reaching app's state (its database or folder), through host.py's digest; the user's | the reaching app's state: previews stay apart, and each login serves only its own plugins | **decided**: as recommended |
@@ -926,13 +934,13 @@ Every row is **open** until the user decides it, unless it is marked decided or 
 | 19 | Errors | records whose kind is named as today's class, mapped to an error enum in Rust and rebuilt as classes on the bridge; text only | records: the platform's 400/502 and `accept` depend on the kind | **decided**: as recommended |
 | 20 | Coalescing state signals | 250 ms; another interval | 250 ms | **decided**: as recommended |
 | 21 | Pushing to the pages | keep polling; server-sent events | keep polling: the existing UI is the reference | **decided**: keep polling. No page of the platform or of the library's shared UI uses a push channel today (checked on 2026-11-09) |
-| 22 | A plugin's status watch | 5 s while linked; other | 5 s while linked, and at once on a background reader's change | open |
+| 22 | A plugin's status watch | 5 s while linked; none: a status is asked when a route asks | none. Today nothing works out a status unless a page asks, the page expects a fresh one right after an action, and several plugins start child processes for each one | **decided**: no watch. A status is asked, as today |
 | 23 | The abstract members | | becomes the traits' required methods (§9's table) | retired |
 | 24 | Records (`Provider`, `Publisher`) with `record_form` | | records are structs | retired |
-| 25 | The plugin API's version | 3.0 for Rust plugins, with 2.x still loading through the bridge; 2.2 | 3.0: a plugin is a node now | open |
+| 25 | The plugin API's version | 3.0 for Rust plugins, with 2.x still loading through the bridge; each plugin keeps the number it states today | each keeps its number: `/api/plugins` and `/api/status` show it. That a plugin is a node is carried by the hello's `proto` and by the manifest's own format number | **decided**: each plugin keeps the number it states today, ported or not (2.1 for the 16 machine plugins, 2.0 for the 5 assistants). There is no 3.0 |
 | 26 | `App.api` abstract | | becomes a trait method | retired |
 | 27 | A plugin's process ending | 10 s after its last synapse, a request in progress let finish; at once | 10 s, and let finish | **decided**: as recommended |
-| 28 | A setup outliving the platform | finishes, its lines in the node's log; stopped | finishes: a half-done install is worse | open |
+| 28 | A setup or a packages update running when the platform stops | it finishes in the plugin's process; it is stopped | finishes: a half-done install is worse, and 27 already lets a request in progress finish. Today it is neither: the job's thread dies with the platform and the command it started is left alone | **decided**: "It finishes". The plugin's process carries the job to its end, then ends |
 | 29 | host.py rebuilt on the network | | the bridge period (§4.10) | retired |
 | 30 | Old dict asks | | stay on host.py's own pipes until each host moves (§4.10) | retired |
 | 31 | An in-process fallback | | the bridge period: a piece switches once its goldens pass | retired |
@@ -968,7 +976,7 @@ Every row is **open** until the user decides it, unless it is marked decided or 
 | 61 | Python callbacks from Rust | | the bridge only (§4.9) | retired |
 | 62 | The bridge | PyO3 bindings of liminal-net (abi3, maturin); a small pure-Python speaker of the protocol | PyO3: one implementation of the network, checked once | **decided**: as recommended |
 | 63 | The toolchain here | rustup's stable MSVC toolchain (the VS 2022 C++ tools give the linker); the GNU toolchain | the MSVC toolchain | **decided**: the user installed it on 2026-11-09 (rustup 1.29.3, `stable-x86_64-pc-windows-msvc`, rustc and cargo 1.99.1, in `~\.cargo\bin`). maturin comes with the bridge (a PyPI download: the user's yes then) |
-| 64 | The repositories' CI | every repository builds its crate; wheels only | every repository builds its crate | open |
+| 64 | The repositories' CI | every repository builds its crate; wheels only | every repository builds its crate | **decided**: every repository builds its crate, once liminal-net can be fetched from GitHub (58: on the user's yes). How CI gets the neighbouring repositories is a row of its own |
 | 65 | C++ | the crate's C ABI (cbindgen's `liminal_node.h`); a C++ port of the core | the C ABI: still one implementation | open |
 | 66 | The order with Rust | | set by the user's scope answers (§1) | retired |
 | 67 | How nodes organize their side | from their links and what they touch, recomputed as links change; also announced by the nodes | from links and touches (§3.1): nothing to declare, and Connections shows it | **decided**: as recommended |
@@ -981,7 +989,7 @@ Every row is **open** until the user decides it, unless it is marked decided or 
 | 74 | The HTTP side | axum (on hyper); hyper alone; tiny_http | axum: routing reads like today's tables, and every header and check of §8.2 is kept | open |
 | 75 | Tables | Polars for the pandas work and ndarray for numpy; DataFusion | Polars and ndarray | open |
 | 76 | The calendars' port | from exchange_calendars 4.13.2's rules (Apache-2.0, its notice kept), checked against the Python's sessions for every exchange over decades of dates; by hand from the exchanges' notices | from exchange_calendars' rules, checked | open |
-| 77 | How an app finds its Rust plugins | each plugin a node executable of its own, found by a manifest, enabled and disabled as `plugins.json` does; compiled into the app; dynamic libraries | executables with manifests: compiled in would break the separate repositories, and dynamic libraries have no stable Rust ABI and would put plugins back into the app's process | open |
+| 77 | How an app finds its Rust plugins | each plugin a node executable of its own, found by a manifest, enabled and disabled as `plugins.json` does; compiled into the app; dynamic libraries | executables with manifests: compiled in would break the separate repositories, and dynamic libraries have no stable Rust ABI and would put plugins back into the app's process | **decided**: a program per plugin, found by a manifest. The manifest's content, format and place are rows of their own |
 | 78 | The goldens | recorded from today's Python, black-box, on scratch fixtures, and kept in each repository's tests; with §8.4's details kept exactly | as recommended | open |
 | 79 | Crates and toolchain | edition 2024 on Rust 1.99 stable, the dependency list approved once; per crate as needed | edition 2024 on stable; the list approved once, before the first build | **decided**: as recommended |
 | 80 | This document's home | liminal-net, as the protocol's specification, once its repository exists; liminal-libs | liminal-net: the specification beside its implementation, and liminal-libs keeps a pointer | **decided**: as recommended |
@@ -1015,3 +1023,6 @@ Every row is **open** until the user decides it, unless it is marked decided or 
 | 108 | Delivery settings | direct, encoded (42's test mode) and wire, with the same 16 MB rule and errors; direct and wire only | three: decision 42 names an encoding of the in-process path | **decided**: as recommended |
 | 109 | Requests in progress | uncapped in 0.3; capped, the next refused with an error | uncapped for now: a cap that stops the reader would hold a status poll | **decided**: uncapped in 0.3, to be looked at again |
 | 110 | What a built-in function may hold (`gate`, `in_order`) | capped like a line, the oldest held dropped and counted; no cap | capped: a gate whose condition never comes would undo the line's cap one step later | open |
+| 111 | "Not for this machine" | answered by the platform from the manifest, which names the systems a plugin is for; asked of the plugin's process | from the manifest: the Linux-only plugins then never start on a Windows PC, and are not built for it | **decided**: from the manifest, with today's words |
+| 112 | The five AI assistants in the platform slice | a manifest and library code, no process; a process each | no process: the platform asks nothing of an assistant but its declarations and whether its key and plan are valid | **decided**: no process in this slice. Decision 6 stands for later: they become nodes when the charts and the integrator, which ask them to work, are ported |
+| 113 | How long a plugin's process lives (what today's attach becomes) | while it is active (switched on and valid), from the platform's start to its end; while it is switched on, valid or not; only while a page asks; as each plugin declares | while it is active: it is what attaching does today, and the user's rule of 2026-11-01 (resident while its client holds it) | **decided**: "While it is active". The platform holds a synapse to each active plugin and asks `attach` and `detach` of it where today's code calls them. A plugin that is switched on but not valid has a process only while a page asks |
