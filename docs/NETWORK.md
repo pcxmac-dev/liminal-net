@@ -4,7 +4,9 @@ Status: **draft for review**. It was first written on 2026-11-09 for Python on a
 for a full rewrite in Rust. Its home is liminal-net (decision 80); liminal-libs keeps a pointer.
 - Built: liminal-net 0.1, the network in Rust (§3.4), with its tests and the test vectors of §5.7; and 0.2, the
   Python bridge (§4.9).
-- Decided: 1–8, 12–15, 17–21, 27, 35–40, 42–56, 58, 60, 62, 63, 67, 70–73, 79–83 and 89–92.
+- Decided and not built yet: a node's queue and its own thread (§4.11), in-process delivery (decision 42), and the
+  macro that writes an interface from its trait (decision 38). They come with liminal-net 0.3.
+- Decided: 1–8, 12–15, 17–21, 27, 35–40, 42–56, 58, 60, 62, 63, 67, 70–73, 79–83 and 89–96.
 - Retired by the rewrite: the rows marked so.
 - Every other decision in the log (§10) stays open until the user decides it, and the code follows only decided
   items.
@@ -39,6 +41,10 @@ In the user's words, 2026-11-09:
 - "is there a way to have python functions embedded in these nodes" ("pay in mind, they are rust based"), "is there
   a way to use the same types of datatypes/constructs that python uses, in rust ?", and then: "then. lets do a full
   rewrite in rust. All liminal-net stuff will be done in a few days"
+- During the platform slice's walk, the same day: "nodes are meant to wrap stateful objects, when an object
+  receives many updates (inputs) or needs to output frequently, to the point where the program/process is not able
+  to give enough real processing priority to processing the queue of a node, then the node needs to take a thread
+  with in the context of the process, and run autonomously." (§4.11)
 
 Their answers on the rewrite's scope:
 
@@ -61,6 +67,7 @@ The requirements drawn from them:
 | R6 | Every decision is walked through with the user; nothing is skipped over. |
 | R7 | At each synapse, callbacks or variable functions filter the stimulus, so that output comes out in the right logical order. |
 | R8 | Rust everywhere. Python appears only in nodes not yet replaced, through liminal-net's bridge, which goes with the last of them. |
+| R9 | A node wraps a stateful object and has a queue of its own. A node whose queue its process cannot serve fast enough takes a thread of its own within that process, and runs autonomously (§4.11). |
 
 ## 2. The terms
 
@@ -84,6 +91,8 @@ to other nodes' dendrites.
 | **handle** | How a node or a callable is passed in a message: an id the receiver uses to reach it, released explicitly. |
 | **scope** | What names a set of nodes' addresses: the reaching app's state (its database, or its folder), through host.py's digest (decisions 14 and 82). Two scopes never share a process. |
 | **bridge** | liminal-net's Python module (decision 62): how a Python object takes part as a node while the Python is replaced, piece by piece. |
+| **queue** | A node's own line of what waits for it: the signals that arrived for its state, taken in order, one at a time, and the signals it fires. Requests run beside it (decisions 48 and 95). |
+| **autonomous** | A node that has taken a thread of its own within its process, because its queue was not served fast enough or because it declared so. It keeps the thread until it ends (§4.11). |
 
 ## 3. How the network works
 
@@ -448,6 +457,45 @@ wheel for Python 3.12 and up. There is still one implementation of the network.
   pipe (decision 82). Both use the same key file.
 - Moving a host means restarting the tasks that hold its old clients (LiminalCharts, LiminalIntegrator), with the
   user's yes each time.
+
+### 4.11 A node's queue, and a thread of its own
+
+The user, 2026-11-09: "nodes are meant to wrap stateful objects, when an object receives many updates (inputs) or
+needs to output frequently, to the point where the program/process is not able to give enough real processing
+priority to processing the queue of a node, then the node needs to take a thread with in the context of the
+process, and run autonomously."
+
+- **A node wraps a stateful object.** The object is the node's own code (its `Hillock`). The node around it is its
+  dendrites, its axon and its queue.
+- **The queue** (decision 95) holds what waits for the node:
+  - the signals that arrived for its state, taken in order, one at a time;
+  - the signals it fires, on their way along its axon.
+
+  Requests do not wait in it. They run side by side on worker threads (decision 48), so a slow request never holds
+  up the rest: a plugin answers a status poll while one of its setup steps runs. The object keeps its own locks.
+- **Shared handling.** Until a node needs more, its queue is served by its process's shared threads, along with
+  every other node's.
+- **A thread of its own** (decision 93). A node takes one when either holds:
+  - *measured*: its stimuli keep waiting longer than a limit, or its backlog passes a count. The limits are
+    settings, set by measuring;
+  - *declared*: its own code says it is autonomous from its start (a sampler, a recorder, a terminal's reader).
+
+  From then on the node runs autonomously: its own thread serves its queue, in and out, whatever the rest of the
+  process is doing.
+- **It keeps the thread until it ends** (decision 94, the user's choice). There is no way back to the shared
+  handling, so the measure has to be sure before a node moves: a short burst is not enough.
+- **Its priority** (decision 96). A node says which priority its thread needs, along with its autonomy. It is
+  normal unless the node says otherwise.
+
+liminal-net 0.1 and 0.2 do not have this. Every node's code runs on the process's shared worker threads, each
+synapse's signals wait in a line of their own with no cap, and nothing measures a wait. It comes with 0.3. The
+design under these four decisions is still open, and each point becomes a row of the log before it is built:
+- the limits, and what exactly is measured;
+- how the shared threads serve many nodes' queues fairly;
+- the queues' caps, and what happens when a queue is full;
+- how a signal between two nodes of one process enters the queue (decision 42);
+- how many nodes of one process may be autonomous at once;
+- whether a node's own periodic work (a sampler's loop) runs on that thread.
 
 ## 5. The protocol (language-neutral)
 
@@ -906,3 +954,7 @@ Every row is **open** until the user decides it, unless it is marked decided or 
 | 90 | A new link for a state signal | gets the latest at once; waits for the next change | at once: the latest wins for a state, so a new link should not wait for a change to learn it | **decided**: as recommended |
 | 91 | A signal's `seq` | counted per link, after the sender's functions; per source and signal, before them | per link, after: a filter at the sender would otherwise leave gaps that the receiver's `in_order` waits for | **decided**: as recommended |
 | 92 | `link`, `unlink` and `tune` | carry an id and are answered, null or an error; sent with no answer | answered: a bad function or an unknown link is said back to the node that asked | **decided**: as recommended |
+| 93 | When a node takes a thread of its own (§4.11) | measured (its stimuli keep waiting longer than a limit, or its backlog passes a count) or declared by the node from its start; measured only; declared only | measured or declared: the measure catches a node nobody expected to be busy, and the declaration spares an always-busy node the wait | **decided**: measured, or declared |
+| 94 | Giving the thread back | after a quiet time; never, until the node ends | after a quiet time: nothing runs unless used | **decided**, the user's choice against the recommendation: "Keeps it until it ends". Once autonomous, a node stays autonomous until it ends |
+| 95 | What a node's queue holds | its signals in order, one at a time, and what it fires, with requests run beside it (48); everything, one at a time | signals queue, requests beside: a slow request never holds up the rest, as on today's threaded server | **decided**: signals queue, requests beside |
+| 96 | An autonomous thread's priority | normal; raised for every autonomous node; declared by each node | normal: a thread of its own already removes the waiting, and a raised priority could starve the page's answers | **decided**, the user's choice: "Each node says". A node declares the priority it needs along with its autonomy, normal by default |
