@@ -4,7 +4,7 @@ build-backend = "maturin"
 
 [project]
 name = "liminal-net"
-version = "0.2.1"
+version = "0.2.2"
 description = "liminal-net's Python bridge: a Python object as a node on Liminal's network"
 requires-python = ">=3.12"
 

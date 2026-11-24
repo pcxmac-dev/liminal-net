@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.2.2 (2026-11-24)
+
+`address::digest` folds a path's case on Windows alone, as liminal-libs' `host._digest` does since its 1.53.1. It
+lowercased everywhere, so on Linux a scope whose path held capitals got another digest than the library's, and the
+bridge's own test (`test_digests_and_addresses_match_host_py`) failed there. The frame test of 0.2.1 laid out as
+`cargo fmt` wants.
+
 ## 0.2.1 (2026-11-24)
 
 The review of 2026-11-21 on your desktop (Monday list item 26), checked against the checkout: `frame::read` took a length prefix cut off after one to three of its four bytes for the other end closing

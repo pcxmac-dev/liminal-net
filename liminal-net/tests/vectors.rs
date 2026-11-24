@@ -285,9 +285,15 @@ async fn a_length_prefix_cut_off_is_a_frame_cut_off_not_a_clean_end() {
     }
     let whole = encode(&Value::from("hi")).unwrap();
     let mut body_cut = std::io::Cursor::new(whole[..whole.len() - 1].to_vec());
-    assert!(matches!(frame::read(&mut body_cut).await, Err(liminal_net::NetError::Closed)));
+    assert!(matches!(
+        frame::read(&mut body_cut).await,
+        Err(liminal_net::NetError::Closed)
+    ));
     let mut two = std::io::Cursor::new([whole.clone(), whole].concat());
     assert_eq!(frame::read(&mut two).await.unwrap(), Some(Value::from("hi")));
     assert_eq!(frame::read(&mut two).await.unwrap(), Some(Value::from("hi")));
-    assert!(matches!(frame::read(&mut two).await, Ok(None)), "a clean end after whole frames");
+    assert!(
+        matches!(frame::read(&mut two).await, Ok(None)),
+        "a clean end after whole frames"
+    );
 }

@@ -11,7 +11,11 @@ use std::path::{Component, Path, PathBuf};
 /// host.py's `_digest`: the first 10 hex characters of the SHA-1 of the scope's path, resolved as Python's
 /// `Path.resolve()` resolves it, then lower-cased.
 pub fn digest(scope: &Path) -> String {
-    let text = resolve(scope).to_string_lossy().to_lowercase();
+    // the case folded on Windows alone, as liminal-libs' host._digest does since its 1.53.1 (os.path.normcase): on
+    // Linux two scopes whose paths differ only in case are two, and the two digests must agree there too
+    let text = resolve(scope).to_string_lossy().into_owned();
+    #[cfg(windows)]
+    let text = text.to_lowercase();
     let hash = Sha1::digest(text.as_bytes());
     crate::handshake::hex(&hash)[..10].to_string()
 }
