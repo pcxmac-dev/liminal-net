@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.1 (2026-11-24)
+
+The review of 2026-11-21 on your desktop (Monday list item 26), checked against the checkout: `frame::read` took a length prefix cut off after one to three of its four bytes for the other end closing
+between frames (`None`). It is now `NetError::Closed`, as a body cut off is: only an end before a frame's first byte
+is a clean end.
+
 ## 0.2.0 (2026-11-09)
 
 The Python bridge, `liminal-net-py` (decision 62): a Python object as a node on the network, built with PyO3 0.30

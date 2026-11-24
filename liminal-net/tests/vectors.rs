@@ -271,3 +271,23 @@ fn the_key_is_made_once_and_shared() {
     assert_eq!(liminal_net::key::load_or_create(&dir).unwrap().bytes().len(), 64);
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+#[tokio::test]
+async fn a_length_prefix_cut_off_is_a_frame_cut_off_not_a_clean_end() {
+    // The review of 2026-11-21 (item 26): one to three bytes of a length, then the end, was read as the other end
+    // closing between frames.
+    for cut in 1..4usize {
+        let mut part = std::io::Cursor::new(5u32.to_be_bytes()[..cut].to_vec());
+        assert!(
+            matches!(frame::read(&mut part).await, Err(liminal_net::NetError::Closed)),
+            "{cut} bytes of a length"
+        );
+    }
+    let whole = encode(&Value::from("hi")).unwrap();
+    let mut body_cut = std::io::Cursor::new(whole[..whole.len() - 1].to_vec());
+    assert!(matches!(frame::read(&mut body_cut).await, Err(liminal_net::NetError::Closed)));
+    let mut two = std::io::Cursor::new([whole.clone(), whole].concat());
+    assert_eq!(frame::read(&mut two).await.unwrap(), Some(Value::from("hi")));
+    assert_eq!(frame::read(&mut two).await.unwrap(), Some(Value::from("hi")));
+    assert!(matches!(frame::read(&mut two).await, Ok(None)), "a clean end after whole frames");
+}

@@ -31,11 +31,20 @@ pub async fn write<W: AsyncWrite + Unpin + ?Sized>(w: &mut W, value: &Value) -> 
     Ok(())
 }
 
-/// Reads one message: `None` when the other end closed between two frames.
+/// Reads one message: `None` when the other end closed between two frames. An end inside a frame, its length
+/// prefix included (one to three of its four bytes), is `NetError::Closed`: a frame cut off, never a clean end.
 pub async fn read<R: AsyncRead + Unpin + ?Sized>(r: &mut R) -> Result<Option<Value>, NetError> {
     let mut len = [0u8; 4];
-    if let Err(e) = r.read_exact(&mut len).await {
-        return if closed(&e) { Ok(None) } else { Err(e.into()) };
+    let mut got = 0;
+    while got < len.len() {
+        match r.read(&mut len[got..]).await {
+            Ok(0) if got == 0 => return Ok(None),
+            Ok(0) => return Err(NetError::Closed),
+            Ok(k) => got += k,
+            Err(e) if e.kind() == ErrorKind::Interrupted => continue,
+            Err(e) if closed(&e) => return if got == 0 { Ok(None) } else { Err(NetError::Closed) },
+            Err(e) => return Err(e.into()),
+        }
     }
     let n = u32::from_be_bytes(len) as usize;
     if n > MAX_FRAME {
