@@ -35,14 +35,17 @@ fn digests_match_host_py() {
 #[cfg(unix)]
 #[test]
 fn digests_match_host_py() {
-    assert_eq!(digest(Path::new("/no-such-liminal-dir/Scope/liminal.db")), "405e53966f");
+    // the case kept on Linux, as host._digest keeps it since liminal-libs 1.53.1: two paths differing only in case
+    // are two scopes there (0.2.2)
+    assert_eq!(digest(Path::new("/no-such-liminal-dir/Scope/liminal.db")), "510702a677");
+    assert_eq!(digest(Path::new("/no-such-liminal-dir/scope/liminal.db")), "405e53966f");
     assert_eq!(
         address(
             "fetcher",
             Path::new("/no-such-liminal-dir/Scope/liminal.db"),
             Path::new("/run/ipc")
         ),
-        "/run/ipc/net-fetcher-405e53966f.sock"
+        "/run/ipc/net-fetcher-510702a677.sock"
     );
 }
 
